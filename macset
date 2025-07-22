@@ -1,9 +1,5 @@
-#!/bin/sh
+#!/bin/sh /etc/rc.common
 
-# Source rc.common for OpenWrt init.d compatibility (if available)
-if [ -f "/etc/rc.common" ]; then
-    . /etc/rc.common
-fi
 
 # MACSet - MAC Address Set Processor Service for OpenWrt
 #
@@ -136,34 +132,3 @@ Commands:
 
 EOF
 }
-
-# Main command dispatcher
-case "$1" in
-    start)
-        start_service
-        ;;
-    stop)
-        stop_service
-        ;;
-    restart)
-        restart
-        ;;
-    status)
-        status
-        ;;
-    config)
-        config
-        ;;
-    process)
-        process
-        ;;
-    usage|help)
-        usage
-        ;;
-    *)
-        usage
-        exit 1
-        ;;
-esac
-
-exit $? 
