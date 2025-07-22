@@ -7,10 +7,6 @@ fi
 
 # MACSet - MAC Address Set Processor Service for OpenWrt
 #
-# This init script manages the MACSet processor service which monitors
-# source directories or individual file pairs for changes and processes
-# MAC addresses automatically.
-#
 # Author: Jun Zhang
 # Version: 1.4.0
 # License: MIT
@@ -24,135 +20,25 @@ USE_PROCD=1
 # Service paths
 PROG="/usr/bin/macset-processor"
 CONFIG_FILE="/etc/macset/config"
-PID_FILE="/var/run/macset.pid"
-LOG_FILE="/var/log/macset/macset.log"
 
-# Service name
-SERVICE_NAME="macset"
-
-# Default configuration values
-DEFAULT_SOURCE_DIR="/etc/macset/sources"
-DEFAULT_OUTPUT_DIR="/etc/macset/outputs"
-DEFAULT_MONITOR_INTERVAL=5
-DEFAULT_FILE_PATTERN="*.txt"
-DEFAULT_OPERATION_MODE="directory"
+# Default configuration
+SOURCE_DIR="/etc/macset/sources"
+OUTPUT_DIR="/etc/macset/outputs"
+MONITOR_INTERVAL=5
+FILE_PATTERN="*.txt"
+OPERATION_MODE="directory"
 
 # Load configuration if available
-load_config() {
-    if [ -f "$CONFIG_FILE" ]; then
-        . "$CONFIG_FILE"
-    fi
-    
-    # Set defaults if not defined in config
-    SOURCE_DIR="${SOURCE_DIR:-$DEFAULT_SOURCE_DIR}"
-    OUTPUT_DIR="${OUTPUT_DIR:-$DEFAULT_OUTPUT_DIR}"
-    LOG_FILE="${LOG_FILE:-$LOG_FILE}"
-    MONITOR_INTERVAL="${MONITOR_INTERVAL:-$DEFAULT_MONITOR_INTERVAL}"
-    FILE_PATTERN="${FILE_PATTERN:-$DEFAULT_FILE_PATTERN}"
-    OPERATION_MODE="${OPERATION_MODE:-$DEFAULT_OPERATION_MODE}"
-    FILE_PAIRS="${FILE_PAIRS:-}"
-}
-
-# Check dependencies
-check_dependencies() {
-    local missing_deps=""
-    
-    # Check for required commands
-    for cmd in grep sed find; do
-        if ! command -v "$cmd" >/dev/null 2>&1; then
-            missing_deps="$missing_deps $cmd"
-        fi
-    done
-    
-    # Check for stat command or alternatives
-    if ! command -v "stat" >/dev/null 2>&1; then
-        # Try to install coreutils-stat if available
-        if opkg list-installed | grep -q "coreutils-stat" 2>/dev/null; then
-            echo "INFO: coreutils-stat is already installed"
-        elif opkg list-available | grep -q "coreutils-stat" 2>/dev/null; then
-            echo "INFO: Installing coreutils-stat..."
-            opkg update >/dev/null 2>&1 && opkg install coreutils-stat >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                echo "INFO: coreutils-stat installed successfully"
-            else
-                echo "WARN: Could not install coreutils-stat, will use alternative method"
-            fi
-        else
-            echo "WARN: stat command not available, will use alternative method"
-        fi
-    fi
-    
-    if [ -n "$missing_deps" ]; then
-        echo "ERROR: Missing required dependencies:$missing_deps"
-        return 1
-    fi
-    
-    return 0
-}
-
-# Create necessary directories
-create_directories() {
-    mkdir -p "$(dirname "$LOG_FILE")"
-    
-    if [ "$OPERATION_MODE" != "pairs" ]; then
-        mkdir -p "$SOURCE_DIR" "$OUTPUT_DIR"
-        chmod 755 "$SOURCE_DIR" "$OUTPUT_DIR"
-    fi
-    
-    chmod 755 "$(dirname "$LOG_FILE")"
-}
-
-# Validate configuration
-validate_config() {
-    local errors=0
-    
-    # Check operation mode
-    if [ "$OPERATION_MODE" = "pairs" ]; then
-        if [ -z "$FILE_PAIRS" ]; then
-            echo "ERROR: FILE_PAIRS is empty but OPERATION_MODE is set to 'pairs'"
-            errors=$((errors + 1))
-        fi
-    else
-        # Directory mode validation
-        if [ ! -d "$SOURCE_DIR" ]; then
-            echo "WARNING: Source directory $SOURCE_DIR does not exist, will be created"
-        fi
-        
-        if [ ! -d "$OUTPUT_DIR" ]; then
-            echo "WARNING: Output directory $OUTPUT_DIR does not exist, will be created"
-        fi
-    fi
-    
-    # Validate monitor interval
-    if ! echo "$MONITOR_INTERVAL" | grep -q '^[0-9]\+$' || [ "$MONITOR_INTERVAL" -lt 1 ]; then
-        echo "ERROR: Invalid monitor interval: $MONITOR_INTERVAL (must be positive integer)"
-        errors=$((errors + 1))
-    fi
-    
-    return $errors
-}
+if [ -f "$CONFIG_FILE" ]; then
+    . "$CONFIG_FILE"
+fi
 
 # Start service
 start_service() {
-    echo "Starting MACSet MAC Address Processor..."
+    echo "Starting MACSet..."
     
-    # Load configuration
-    load_config
-    
-    # Check dependencies
-    if ! check_dependencies; then
-        echo "ERROR: Failed to start MACSet - missing dependencies"
-        return 1
-    fi
-    
-    # Validate configuration
-    if ! validate_config; then
-        echo "ERROR: Failed to start MACSet - invalid configuration"
-        return 1
-    fi
-    
-    # Create necessary directories
-    create_directories
+    # Create directories
+    mkdir -p "$SOURCE_DIR" "$OUTPUT_DIR" "/var/log/macset"
     
     # Check if processor exists
     if [ ! -x "$PROG" ]; then
@@ -162,247 +48,91 @@ start_service() {
     
     # Start the service using procd
     procd_open_instance
-    if [ "$OPERATION_MODE" = "pairs" ]; then
-        # File pairs mode
+    if [ "$OPERATION_MODE" = "pairs" ] && [ -n "$FILE_PAIRS" ]; then
         procd_set_param command "$PROG" -m -i "$MONITOR_INTERVAL" -F "$FILE_PAIRS"
     else
-        # Directory mode
         procd_set_param command "$PROG" -m -i "$MONITOR_INTERVAL" -f "$FILE_PATTERN" "$SOURCE_DIR" "$OUTPUT_DIR"
     fi
     procd_set_param respawn
-    procd_set_param respawn_threshold 10
-    procd_set_param respawn_timeout 30
-    procd_set_param respawn_retry 5
-    procd_set_param stdout 1
-    procd_set_param stderr 1
-    procd_set_param file "$CONFIG_FILE"
     procd_close_instance
     
-    echo "MACSet MAC Address Processor started successfully"
+    echo "MACSet started successfully"
 }
 
 # Stop service
 stop_service() {
-    echo "Stopping MACSet MAC Address Processor..."
-    
-    # Stop the service using procd
-    procd_kill "$SERVICE_NAME" 2>/dev/null
-    
-    # Remove temporary files
-    [ -f "/tmp/macset_last_modified" ] && rm -f "/tmp/macset_last_modified"
-    
-    echo "MACSet MAC Address Processor stopped"
-}
-
-# Reload service
-reload_service() {
-    echo "Reloading MACSet MAC Address Processor configuration..."
-    
-    # Reload the service using procd
-    procd_signal "$SERVICE_NAME" SIGHUP 2>/dev/null
-    
-    echo "MACSet MAC Address Processor configuration reloaded"
-}
-
-# Service status
-service_running() {
-    procd_running "$SERVICE_NAME"
+    echo "Stopping MACSet..."
+    procd_kill "macset" 2>/dev/null
+    rm -f "/tmp/macset_last_modified"
+    echo "MACSet stopped"
 }
 
 # Show status
 status() {
-    if service_running; then
-        echo "MACSet MAC Address Processor is running"
-        
-        # Load configuration for status display
-        load_config
-        
-        if [ "$OPERATION_MODE" = "pairs" ]; then
-            echo "Operation mode: File pairs"
-            echo "File pairs: $FILE_PAIRS"
-        else
-            echo "Operation mode: Directory monitoring"
-            if [ -d "$SOURCE_DIR" ]; then
-                local source_count=$(find "$SOURCE_DIR" -maxdepth 1 -name "$FILE_PATTERN" -type f 2>/dev/null | wc -l)
-                echo "Source directory: $SOURCE_DIR ($source_count files matching '$FILE_PATTERN')"
-            else
-                echo "Source directory: $SOURCE_DIR (not found)"
-            fi
-            
-            if [ -d "$OUTPUT_DIR" ]; then
-                local output_count=$(find "$OUTPUT_DIR" -maxdepth 1 -name "*_clean.txt" -type f 2>/dev/null | wc -l)
-                echo "Output directory: $OUTPUT_DIR ($output_count processed files)"
-            else
-                echo "Output directory: $OUTPUT_DIR (not found)"
-            fi
-        fi
-        
-        if [ -f "$LOG_FILE" ]; then
-            echo "Log file: $LOG_FILE"
-            echo "Last log entries:"
-            tail -5 "$LOG_FILE" 2>/dev/null || echo "  (log file empty or not readable)"
-        fi
+    if procd_running "macset"; then
+        echo "MACSet is running"
+        echo "Source: $SOURCE_DIR"
+        echo "Output: $OUTPUT_DIR"
+        echo "Mode: $OPERATION_MODE"
     else
-        echo "MACSet MAC Address Processor is not running"
+        echo "MACSet is not running"
     fi
 }
 
 # Show configuration
 config() {
-    load_config
-    
     echo "MACSet Configuration:"
-    echo "====================="
-    echo "Operation mode: $OPERATION_MODE"
     echo "Source directory: $SOURCE_DIR"
     echo "Output directory: $OUTPUT_DIR"
-    echo "File pattern: $FILE_PATTERN"
-    echo "Log file: $LOG_FILE"
+    echo "Operation mode: $OPERATION_MODE"
     echo "Monitor interval: ${MONITOR_INTERVAL}s"
-    echo "Config file: $CONFIG_FILE"
     
     if [ "$OPERATION_MODE" = "pairs" ]; then
         echo "File pairs: $FILE_PAIRS"
     fi
     
     if [ -f "$CONFIG_FILE" ]; then
-        echo ""
-        echo "Configuration file contents:"
-        cat "$CONFIG_FILE"
+        echo "Config file: $CONFIG_FILE"
     else
-        echo ""
-        echo "No configuration file found at $CONFIG_FILE"
-        echo "Using default values"
+        echo "Using default configuration"
     fi
 }
 
-# List source files
-sources() {
-    load_config
-    
-    if [ "$OPERATION_MODE" = "pairs" ]; then
-        echo "File pairs mode - source files:"
-        echo "$FILE_PAIRS" | tr ',' '\n' | while IFS='|' read -r source_file output_file; do
-            if [ -n "$source_file" ]; then
-                if [ -f "$source_file" ]; then
-                    local line_count=$(wc -l < "$source_file" 2>/dev/null || echo "0")
-                    echo "  $source_file ($line_count lines)"
-                else
-                    echo "  $source_file (not found)"
-                fi
-            fi
-        done
-    else
-        echo "Directory mode - source files in $SOURCE_DIR:"
-        if [ -d "$SOURCE_DIR" ]; then
-            find "$SOURCE_DIR" -maxdepth 1 -name "$FILE_PATTERN" -type f | while read -r file; do
-                local line_count=$(wc -l < "$file" 2>/dev/null || echo "0")
-                echo "  $file ($line_count lines)"
-            done
-        else
-            echo "  Source directory not found"
-        fi
-    fi
-}
-
-# List output files
-outputs() {
-    load_config
-    
-    if [ "$OPERATION_MODE" = "pairs" ]; then
-        echo "File pairs mode - output files:"
-        echo "$FILE_PAIRS" | tr ',' '\n' | while IFS='|' read -r source_file output_file; do
-            if [ -n "$output_file" ]; then
-                if [ -f "$output_file" ]; then
-                    local line_count=$(wc -l < "$output_file" 2>/dev/null || echo "0")
-                    echo "  $output_file ($line_count lines)"
-                else
-                    echo "  $output_file (not found)"
-                fi
-            fi
-        done
-    else
-        echo "Directory mode - output files in $OUTPUT_DIR:"
-        if [ -d "$OUTPUT_DIR" ]; then
-            find "$OUTPUT_DIR" -maxdepth 1 -name "*_clean.txt" -type f | while read -r file; do
-                local line_count=$(wc -l < "$file" 2>/dev/null || echo "0")
-                echo "  $file ($line_count lines)"
-            done
-        else
-            echo "  Output directory not found"
-        fi
-    fi
-}
-
-# Process all files once
+# Process files once
 process() {
-    echo "Processing all files once..."
+    echo "Processing files..."
     
-    # Load configuration
-    load_config
-    
-    # Check if processor exists
     if [ ! -x "$PROG" ]; then
         echo "ERROR: Processor not found at $PROG"
         return 1
     fi
     
-    # Create necessary directories
-    create_directories
+    mkdir -p "$SOURCE_DIR" "$OUTPUT_DIR"
     
-    # Process files
-    if [ "$OPERATION_MODE" = "pairs" ]; then
-        # File pairs mode
+    if [ "$OPERATION_MODE" = "pairs" ] && [ -n "$FILE_PAIRS" ]; then
         "$PROG" -p -F "$FILE_PAIRS"
     else
-        # Directory mode
         "$PROG" -p -f "$FILE_PATTERN" "$SOURCE_DIR" "$OUTPUT_DIR"
     fi
     
-    if [ $? -eq 0 ]; then
-        echo "Processing completed successfully"
-    else
-        echo "Processing failed, check logs for details"
-        return 1
-    fi
+    echo "Processing completed"
 }
 
 # Show usage
 usage() {
     cat << EOF
-MACSet Service v1.4.0 - MAC Address Processor for OpenWrt
+MACSet Service v1.4.0
 
-Usage: $0 {start|stop|restart|reload|status|config|sources|outputs|process|usage}
+Usage: $0 {start|stop|restart|status|config|process|usage}
 
 Commands:
     start       Start the MACSet service
     stop        Stop the MACSet service
     restart     Restart the MACSet service
-    reload      Reload configuration without restarting
-    status      Show service status and information
-    config      Show current configuration
-    sources     List source files being monitored
-    outputs     List processed output files
-    process     Process all files once (without monitoring)
-    usage       Show this help message
-
-Configuration:
-    Edit $CONFIG_FILE to customize service behavior.
-    
-    For directory mode:
-    - Set OPERATION_MODE="directory"
-    - Configure SOURCE_DIR and OUTPUT_DIR
-    
-    For file pairs mode:
-    - Set OPERATION_MODE="pairs"
-    - Configure FILE_PAIRS with format: "src1|dest1,src2|dest2"
-
-Examples:
-    $0 start              # Start the service
-    $0 status             # Check service status
-    $0 sources            # List source files
-    $0 process            # Process all files once
-    $0 config             # View configuration
+    status      Show service status
+    config      Show configuration
+    process     Process files once
+    usage       Show this help
 
 EOF
 }
@@ -418,20 +148,11 @@ case "$1" in
     restart)
         restart
         ;;
-    reload)
-        reload_service
-        ;;
     status)
         status
         ;;
     config)
         config
-        ;;
-    sources)
-        sources
-        ;;
-    outputs)
-        outputs
         ;;
     process)
         process
