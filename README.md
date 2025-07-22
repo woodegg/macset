@@ -12,6 +12,7 @@ MACSet is a lightweight, efficient MAC address processing service designed speci
 - **Comment Processing**: Removes all comments (lines starting with #) and whitespace
 - **MAC Address Validation**: Ensures only valid MAC addresses are included in output
 - **OpenWrt Integration**: Native OpenWrt init.d service with proper startup/shutdown
+- **OpenWrt Compatibility**: Works on OpenWrt systems without requiring additional packages
 - **Resource Efficient**: Lightweight implementation suitable for embedded systems
 - **Logging**: Comprehensive logging for debugging and monitoring
 - **Flexible Configuration**: Customizable file patterns, directories, and processing options
@@ -20,7 +21,34 @@ MACSet is a lightweight, efficient MAC address processing service designed speci
 
 ### Prerequisites
 - OpenWrt system
-- `grep`, `sed`, `stat`, and `find` commands (usually pre-installed)
+- `grep`, `sed`, and `find` commands (usually pre-installed)
+- `stat` command (optional - will use fallback method if not available)
+
+### Quick Installation
+
+1. **Clone or download** the MACSet project to your OpenWrt system
+2. **Run the installation script** as root:
+   ```bash
+   sudo ./install.sh
+   ```
+3. **Verify installation**:
+   ```bash
+   /etc/init.d/macset status
+   ```
+
+### OpenWrt Compatibility
+
+MACSet is designed to work on OpenWrt systems without requiring additional packages. The installation script will:
+
+- Automatically detect if `stat` command is available
+- Install `coreutils-stat` package if available and needed
+- Use fallback methods for file modification time detection if `stat` is not available
+- Test compatibility before installation
+
+To test OpenWrt compatibility:
+```bash
+./test_openwrt_compatibility.sh
+```
 
 ### Manual Installation
 
