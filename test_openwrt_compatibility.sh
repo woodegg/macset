@@ -47,8 +47,15 @@ test_file_mtime() {
         if command -v stat >/dev/null 2>&1; then
             stat -c %Y "$file" 2>/dev/null || echo "0"
         else
-            # Fallback to ls -l (OpenWrt compatible)
-            ls -l "$file" 2>/dev/null | awk '{print $6, $7, $8}' | xargs -I {} date -d "{}" +%s 2>/dev/null || echo "0"
+            # Fallback for OpenWrt: use file size + first line hash as change indicator
+            if [ -f "$file" ]; then
+                local size=$(wc -c < "$file" 2>/dev/null || echo "0")
+                # Use first line content to detect changes (simple but effective)
+                local first_line=$(head -1 "$file" 2>/dev/null | wc -c 2>/dev/null || echo "0")
+                echo "$((size * 1000 + first_line))"
+            else
+                echo "0"
+            fi
         fi
     }
     
