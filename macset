@@ -1,4 +1,10 @@
-#!/bin/sh /etc/rc.common
+#!/bin/sh
+
+# Source rc.common for OpenWrt init.d compatibility (if available)
+if [ -f "/etc/rc.common" ]; then
+    . /etc/rc.common
+fi
+
 #
 # MACSet - MAC Address Set Processor Service for OpenWrt
 #
@@ -528,7 +534,7 @@ case "$1" in
         usage
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|reload|status|config|sources|outputs|process|usage}"
+        usage
         exit 1
         ;;
 esac
