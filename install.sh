@@ -72,12 +72,30 @@ check_dependencies() {
     
     local missing_deps=""
     
-    # Check for required commands
-    for cmd in grep sed stat find; do
+    # Check for required commands (OpenWrt compatible)
+    for cmd in grep sed find; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             missing_deps="$missing_deps $cmd"
         fi
     done
+    
+    # Check for stat command or alternatives
+    if ! command -v "stat" >/dev/null 2>&1; then
+        # Try to install coreutils-stat if available
+        if opkg list-installed | grep -q "coreutils-stat" 2>/dev/null; then
+            print_status "INFO" "coreutils-stat is already installed"
+        elif opkg list-available | grep -q "coreutils-stat" 2>/dev/null; then
+            print_status "INFO" "Installing coreutils-stat..."
+            opkg update >/dev/null 2>&1 && opkg install coreutils-stat >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                print_status "INFO" "coreutils-stat installed successfully"
+            else
+                print_status "WARN" "Could not install coreutils-stat, will use alternative method"
+            fi
+        else
+            print_status "WARN" "stat command not available, will use alternative method"
+        fi
+    fi
     
     if [ -n "$missing_deps" ]; then
         print_status "ERROR" "Missing required dependencies:$missing_deps"
@@ -264,7 +282,7 @@ show_examples() {
 
 # Main installation function
 main() {
-    echo "MACSet Installation Script v1.3.0"
+    echo "MACSet Installation Script v1.4.0"
     echo "=================================="
     echo ""
     

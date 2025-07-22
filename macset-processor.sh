@@ -86,6 +86,19 @@ get_output_filename() {
     echo "${name_without_ext}_clean.txt"
 }
 
+# Function to get file modification time (OpenWrt compatible)
+get_file_mtime() {
+    local file="$1"
+    
+    # Try stat first (if available)
+    if command -v stat >/dev/null 2>&1; then
+        stat -c %Y "$file" 2>/dev/null || echo "0"
+    else
+        # Fallback to ls -l (OpenWrt compatible)
+        ls -l "$file" 2>/dev/null | awk '{print $6, $7, $8}' | xargs -I {} date -d "{}" +%s 2>/dev/null || echo "0"
+    fi
+}
+
 # Process MAC addresses from source file
 process_mac_addresses() {
     local source_file="$1"
@@ -226,7 +239,7 @@ monitor_files() {
         
         # Check each file in the source directory
         find "$source_dir" -maxdepth 1 -name "$pattern" -type f 2>/dev/null | while read -r source_file; do
-            local current_modified=$(stat -c %Y "$source_file" 2>/dev/null || echo "0")
+            local current_modified=$(get_file_mtime "$source_file")
             local file_key=$(echo "$source_file" | sed 's/[^a-zA-Z0-9]/_/g')
             local last_modified=$(grep "^$file_key:" "$last_modified_file" 2>/dev/null | cut -d: -f2 || echo "0")
             
@@ -253,7 +266,7 @@ monitor_files() {
                 local output_file="$output_dir/$output_filename"
                 process_mac_addresses "$source_file" "$output_file"
                 
-                local current_modified=$(stat -c %Y "$source_file" 2>/dev/null || echo "0")
+                local current_modified=$(get_file_mtime "$source_file")
                 echo "$file_key:$current_modified" >> "$last_modified_file"
                 files_changed=1
             fi
@@ -285,7 +298,7 @@ monitor_file_pairs() {
         # Check each file pair
         echo "$file_pairs" | tr ',' '\n' | while IFS='|' read -r source_file output_file; do
             if [ -n "$source_file" ] && [ -n "$output_file" ]; then
-                local current_modified=$(stat -c %Y "$source_file" 2>/dev/null || echo "0")
+                local current_modified=$(get_file_mtime "$source_file")
                 local file_key=$(echo "$source_file" | sed 's/[^a-zA-Z0-9]/_/g')
                 local last_modified=$(grep "^$file_key:" "$last_modified_file" 2>/dev/null | cut -d: -f2 || echo "0")
                 
