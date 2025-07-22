@@ -1,0 +1,16 @@
+# IoT Devices - IoT Network
+# Add MAC addresses for IoT devices
+# This file contains devices that should have restricted network access
+aa:bb:cc:dd:ee:ff    # Smart Thermostat
+11:22:33:44:55:66    # Security Camera 1
+22:33:44:55:66:77    # Security Camera 2
+33:44:55:66:77:88    # Smart Door Lock
+44:55:66:77:88:99    # Smart Speaker
+55:66:77:88:99:aa    # Smart Light Bulb 1
+66:77:88:99:aa:bb    # Smart Light Bulb 2
+77:88:99:aa:bb:cc    # Smart Light Bulb 3
+88:99:aa:bb:cc:dd    # Smart Switch
+99:aa:bb:cc:dd:ee    # Smart Sensor
+aa:bb:cc:dd:ee:ff    # Smart Hub
+bb:cc:dd:ee:ff:00    # Smart Plug 1
+cc:dd:ee:ff:00:11    # Smart Plug 2 

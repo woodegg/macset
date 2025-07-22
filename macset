@@ -1,0 +1,536 @@
+#!/bin/sh /etc/rc.common
+#
+# MACSet - MAC Address Set Processor Service for OpenWrt
+#
+# This init script manages the MACSet processor service which monitors
+# source directories or individual file pairs for changes and processes
+# MAC addresses automatically. Supports multiple files, directories, and file pairs.
+#
+# Author: Jun Zhang
+# Version: 1.4.0
+# License: MIT
+# Date: 2025-07-22
+#
+
+# Service configuration
+START=95
+STOP=15
+USE_PROCD=1
+PROG=/usr/bin/macset-processor
+PID_FILE=/var/run/macset.pid
+CONFIG_FILE=/etc/macset/config
+
+# Service name for procd
+SERVICE_NAME="macset"
+SERVICE_BINARY="macset-processor"
+
+# Default configuration values
+DEFAULT_SOURCE_DIR="/etc/macset/sources"
+DEFAULT_OUTPUT_DIR="/etc/macset/outputs"
+DEFAULT_LOG_FILE="/var/log/macset/macset.log"
+DEFAULT_MONITOR_INTERVAL=5
+DEFAULT_FILE_PATTERN="*.txt"
+DEFAULT_OPERATION_MODE="directory"
+
+# Load configuration if available
+if [ -f "$CONFIG_FILE" ]; then
+    . "$CONFIG_FILE"
+fi
+
+# Set defaults if not defined in config
+SOURCE_DIR="${SOURCE_DIR:-$DEFAULT_SOURCE_DIR}"
+OUTPUT_DIR="${OUTPUT_DIR:-$DEFAULT_OUTPUT_DIR}"
+LOG_FILE="${LOG_FILE:-$DEFAULT_LOG_FILE}"
+MONITOR_INTERVAL="${MONITOR_INTERVAL:-$DEFAULT_MONITOR_INTERVAL}"
+FILE_PATTERN="${FILE_PATTERN:-$DEFAULT_FILE_PATTERN}"
+OPERATION_MODE="${OPERATION_MODE:-$DEFAULT_OPERATION_MODE}"
+FILE_PAIRS="${FILE_PAIRS:-}"
+
+# Service description
+SERVICE_DESC="MACSet MAC Address Processor"
+
+# Logging function
+log_message() {
+    local level="$1"
+    local message="$2"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] $level: $message" >> "$LOG_FILE"
+}
+
+# Check if required dependencies are available
+check_dependencies() {
+    local missing_deps=""
+    
+    # Check for required commands
+    if ! command -v grep >/dev/null 2>&1; then
+        missing_deps="$missing_deps grep"
+    fi
+    
+    if ! command -v sed >/dev/null 2>&1; then
+        missing_deps="$missing_deps sed"
+    fi
+    
+    if ! command -v stat >/dev/null 2>&1; then
+        missing_deps="$missing_deps stat"
+    fi
+    
+    if ! command -v find >/dev/null 2>&1; then
+        missing_deps="$missing_deps find"
+    fi
+    
+    if [ -n "$missing_deps" ]; then
+        echo "ERROR: Missing required dependencies: $missing_deps"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Validate configuration
+validate_config() {
+    local errors=0
+    
+    # Check operation mode
+    if [ "$OPERATION_MODE" = "pairs" ]; then
+        # Validate file pairs configuration
+        if [ -z "$FILE_PAIRS" ]; then
+            echo "ERROR: FILE_PAIRS is empty but OPERATION_MODE is set to 'pairs'"
+            errors=$((errors + 1))
+        else
+            # Validate each file pair
+            echo "$FILE_PAIRS" | tr ',' '\n' | while IFS='|' read -r source_file output_file; do
+                if [ -z "$source_file" ] || [ -z "$output_file" ]; then
+                    echo "ERROR: Invalid file pair format: $source_file|$output_file"
+                    errors=$((errors + 1))
+                fi
+            done
+        fi
+    else
+        # Validate directory configuration
+        if [ ! -d "$SOURCE_DIR" ]; then
+            echo "WARNING: Source directory $SOURCE_DIR does not exist, will be created"
+        fi
+        
+        if [ ! -d "$OUTPUT_DIR" ]; then
+            echo "WARNING: Output directory $OUTPUT_DIR does not exist, will be created"
+        fi
+    fi
+    
+    # Check if log directory exists
+    local log_dir=$(dirname "$LOG_FILE")
+    if [ ! -d "$log_dir" ]; then
+        echo "WARNING: Log directory $log_dir does not exist, will be created"
+    fi
+    
+    # Validate monitor interval
+    if ! echo "$MONITOR_INTERVAL" | grep -q '^[0-9]\+$' || [ "$MONITOR_INTERVAL" -lt 1 ]; then
+        echo "ERROR: Invalid monitor interval: $MONITOR_INTERVAL (must be positive integer)"
+        errors=$((errors + 1))
+    fi
+    
+    # Validate file pattern (only for directory mode)
+    if [ "$OPERATION_MODE" != "pairs" ] && [ -z "$FILE_PATTERN" ]; then
+        echo "ERROR: File pattern cannot be empty in directory mode"
+        errors=$((errors + 1))
+    fi
+    
+    return $errors
+}
+
+# Create necessary directories
+create_directories() {
+    if [ "$OPERATION_MODE" != "pairs" ]; then
+        mkdir -p "$SOURCE_DIR" "$OUTPUT_DIR"
+    fi
+    mkdir -p "$(dirname "$LOG_FILE")"
+    
+    # Set appropriate permissions
+    if [ "$OPERATION_MODE" != "pairs" ]; then
+        chmod 755 "$SOURCE_DIR" "$OUTPUT_DIR"
+    fi
+    chmod 755 "$(dirname "$LOG_FILE")"
+}
+
+# Create sample files in source directory
+create_sample_files() {
+    if [ "$OPERATION_MODE" = "pairs" ]; then
+        return 0
+    fi
+    
+    local sample_file1="$SOURCE_DIR/network_devices.txt"
+    local sample_file2="$SOURCE_DIR/guest_devices.txt"
+    local sample_file3="$SOURCE_DIR/iot_devices.txt"
+    
+    # Create sample file 1 if it doesn't exist
+    if [ ! -f "$sample_file1" ]; then
+        cat > "$sample_file1" << EOF
+# Network Devices - Primary Network
+# Add MAC addresses for devices on the main network
+00:11:22:33:44:55    # iPhone 12 Pro
+aa:bb:cc:dd:ee:ff    # Samsung Galaxy S21
+12:34:56:78:9a:bc    # Dell Laptop
+EOF
+        echo "INFO: Created sample file: $sample_file1"
+    fi
+    
+    # Create sample file 2 if it doesn't exist
+    if [ ! -f "$sample_file2" ]; then
+        cat > "$sample_file2" << EOF
+# Guest Devices - Guest Network
+# Add MAC addresses for guest devices
+fe:dc:ba:98:76:54    # Guest Phone 1
+ab:cd:ef:12:34:56    # Guest Laptop
+99:88:77:66:55:44    # Guest Tablet
+EOF
+        echo "INFO: Created sample file: $sample_file2"
+    fi
+    
+    # Create sample file 3 if it doesn't exist
+    if [ ! -f "$sample_file3" ]; then
+        cat > "$sample_file3" << EOF
+# IoT Devices - IoT Network
+# Add MAC addresses for IoT devices
+de:ad:be:ef:ca:fe    # Smart TV
+1a:2b:3c:4d:5e:6f    # Security Camera
+7a:8b:9c:d:e:f0      # Smart Speaker
+ff:ee:dd:cc:bb:aa    # Smart Thermostat
+EOF
+        echo "INFO: Created sample file: $sample_file3"
+    fi
+}
+
+# Start the service
+start_service() {
+    echo "Starting $SERVICE_DESC..."
+    
+    # Check dependencies
+    if ! check_dependencies; then
+        echo "ERROR: Failed to start $SERVICE_DESC - missing dependencies"
+        return 1
+    fi
+    
+    # Validate configuration
+    if ! validate_config; then
+        echo "ERROR: Failed to start $SERVICE_DESC - configuration errors"
+        return 1
+    fi
+    
+    # Create necessary directories
+    create_directories
+    
+    # Create sample files if auto-create is enabled and in directory mode
+    if [ "$OPERATION_MODE" != "pairs" ] && [ "${AUTO_CREATE_SOURCE:-1}" -eq 1 ]; then
+        create_sample_files
+    fi
+    
+    # Start the service using procd
+    procd_open_instance
+    if [ "$OPERATION_MODE" = "pairs" ]; then
+        # File pairs mode
+        procd_set_param command "$PROG" -m -i "$MONITOR_INTERVAL" -F "$FILE_PAIRS"
+    else
+        # Directory mode
+        procd_set_param command "$PROG" -m -i "$MONITOR_INTERVAL" -f "$FILE_PATTERN" "$SOURCE_DIR" "$OUTPUT_DIR"
+    fi
+    procd_set_param respawn
+    procd_set_param respawn_threshold 10
+    procd_set_param respawn_timeout 30
+    procd_set_param respawn_retry 5
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_set_param file "$CONFIG_FILE"
+    procd_close_instance
+    
+    log_message "INFO" "$SERVICE_DESC started successfully"
+    echo "$SERVICE_DESC started successfully"
+}
+
+# Stop the service
+stop_service() {
+    echo "Stopping $SERVICE_DESC..."
+    
+    # Stop the service using procd
+    procd_kill "$SERVICE_NAME" 2>/dev/null
+    
+    # Remove PID file if it exists
+    [ -f "$PID_FILE" ] && rm -f "$PID_FILE"
+    
+    # Remove temporary files
+    [ -f "/tmp/macset_last_modified" ] && rm -f "/tmp/macset_last_modified"
+    
+    log_message "INFO" "$SERVICE_DESC stopped"
+    echo "$SERVICE_DESC stopped"
+}
+
+# Restart the service
+restart() {
+    stop
+    sleep 2
+    start
+}
+
+# Reload configuration
+reload_service() {
+    echo "Reloading $SERVICE_DESC configuration..."
+    
+    # Reload the service using procd
+    procd_signal "$SERVICE_NAME" SIGHUP 2>/dev/null
+    
+    log_message "INFO" "$SERVICE_DESC configuration reloaded"
+    echo "$SERVICE_DESC configuration reloaded"
+}
+
+# Check service status
+status() {
+    if procd_running "$SERVICE_NAME"; then
+        echo "$SERVICE_DESC is running"
+        
+        # Show additional status information
+        if [ -f "$PID_FILE" ]; then
+            local pid=$(cat "$PID_FILE")
+            echo "Process ID: $pid"
+        fi
+        
+        if [ "$OPERATION_MODE" = "pairs" ]; then
+            echo "Operation mode: File pairs"
+            echo "File pairs: $FILE_PAIRS"
+        else
+            echo "Operation mode: Directory monitoring"
+            if [ -d "$SOURCE_DIR" ]; then
+                local source_count=$(find "$SOURCE_DIR" -maxdepth 1 -name "$FILE_PATTERN" -type f 2>/dev/null | wc -l)
+                echo "Source directory: $SOURCE_DIR ($source_count files matching '$FILE_PATTERN')"
+            else
+                echo "Source directory: $SOURCE_DIR (not found)"
+            fi
+            
+            if [ -d "$OUTPUT_DIR" ]; then
+                local output_count=$(find "$OUTPUT_DIR" -maxdepth 1 -name "*_clean.txt" -type f 2>/dev/null | wc -l)
+                echo "Output directory: $OUTPUT_DIR ($output_count processed files)"
+            else
+                echo "Output directory: $OUTPUT_DIR (not found)"
+            fi
+        fi
+        
+        if [ -f "$LOG_FILE" ]; then
+            local log_size=$(du -h "$LOG_FILE" 2>/dev/null | cut -f1 || echo "unknown")
+            echo "Log file: $LOG_FILE (size: $log_size)"
+        fi
+        
+        # Show recent file changes
+        echo ""
+        echo "Recent file changes:"
+        if [ -f "/tmp/macset_last_modified" ]; then
+            head -5 "/tmp/macset_last_modified" 2>/dev/null | while read -r line; do
+                local file_key=$(echo "$line" | cut -d: -f1)
+                local timestamp=$(echo "$line" | cut -d: -f2)
+                local readable_time=$(date -d "@$timestamp" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown")
+                echo "  $file_key: $readable_time"
+            done
+        else
+            echo "  No file change tracking data available"
+        fi
+        
+        return 0
+    else
+        echo "$SERVICE_DESC is not running"
+        return 1
+    fi
+}
+
+# Show configuration
+config() {
+    echo "MACSet Configuration:"
+    echo "====================="
+    echo "Operation mode: $OPERATION_MODE"
+    if [ "$OPERATION_MODE" = "pairs" ]; then
+        echo "File pairs: $FILE_PAIRS"
+    else
+        echo "Source directory: $SOURCE_DIR"
+        echo "Output directory: $OUTPUT_DIR"
+        echo "File pattern: $FILE_PATTERN"
+    fi
+    echo "Log file: $LOG_FILE"
+    echo "Monitor interval: ${MONITOR_INTERVAL}s"
+    echo "Config file: $CONFIG_FILE"
+    echo ""
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        echo "Current configuration file contents:"
+        echo "-----------------------------------"
+        cat "$CONFIG_FILE"
+    else
+        echo "No configuration file found at $CONFIG_FILE"
+        echo "Using default values"
+    fi
+}
+
+# List source files
+list_sources() {
+    if [ "$OPERATION_MODE" = "pairs" ]; then
+        echo "File pairs configuration:"
+        echo "========================"
+        echo "$FILE_PAIRS" | tr ',' '\n' | while IFS='|' read -r source_file output_file; do
+            if [ -n "$source_file" ] && [ -n "$output_file" ]; then
+                if [ -f "$source_file" ]; then
+                    local size=$(wc -l < "$source_file" 2>/dev/null || echo "0")
+                    local modified=$(stat -c %Y "$source_file" 2>/dev/null || echo "0")
+                    local readable_time=$(date -d "@$modified" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown")
+                    echo "  $source_file -> $output_file ($size lines, modified: $readable_time)"
+                else
+                    echo "  $source_file -> $output_file (source file not found)"
+                fi
+            fi
+        done
+    else
+        echo "Source files in $SOURCE_DIR:"
+        echo "============================"
+        
+        if [ -d "$SOURCE_DIR" ]; then
+            find "$SOURCE_DIR" -maxdepth 1 -name "$FILE_PATTERN" -type f 2>/dev/null | while read -r file; do
+                local size=$(wc -l < "$file" 2>/dev/null || echo "0")
+                local modified=$(stat -c %Y "$file" 2>/dev/null || echo "0")
+                local readable_time=$(date -d "@$modified" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown")
+                echo "  $(basename "$file") ($size lines, modified: $readable_time)"
+            done
+        else
+            echo "Source directory does not exist"
+        fi
+    fi
+}
+
+# List output files
+list_outputs() {
+    if [ "$OPERATION_MODE" = "pairs" ]; then
+        echo "File pairs output status:"
+        echo "========================"
+        echo "$FILE_PAIRS" | tr ',' '\n' | while IFS='|' read -r source_file output_file; do
+            if [ -n "$source_file" ] && [ -n "$output_file" ]; then
+                if [ -f "$output_file" ]; then
+                    local size=$(wc -l < "$output_file" 2>/dev/null || echo "0")
+                    local modified=$(stat -c %Y "$output_file" 2>/dev/null || echo "0")
+                    local readable_time=$(date -d "@$modified" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown")
+                    echo "  $output_file ($size MAC addresses, generated: $readable_time)"
+                else
+                    echo "  $output_file (output file not found)"
+                fi
+            fi
+        done
+    else
+        echo "Output files in $OUTPUT_DIR:"
+        echo "============================"
+        
+        if [ -d "$OUTPUT_DIR" ]; then
+            find "$OUTPUT_DIR" -maxdepth 1 -name "*_clean.txt" -type f 2>/dev/null | while read -r file; do
+                local size=$(wc -l < "$file" 2>/dev/null || echo "0")
+                local modified=$(stat -c %Y "$file" 2>/dev/null || echo "0")
+                local readable_time=$(date -d "@$modified" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown")
+                echo "  $(basename "$file") ($size MAC addresses, generated: $readable_time)"
+            done
+        else
+            echo "Output directory does not exist"
+        fi
+    fi
+}
+
+# Process all files once
+process_all() {
+    echo "Processing files..."
+    
+    if [ -x "$PROG" ]; then
+        if [ "$OPERATION_MODE" = "pairs" ]; then
+            "$PROG" -p -F "$FILE_PAIRS"
+        else
+            "$PROG" -p -f "$FILE_PATTERN" "$SOURCE_DIR" "$OUTPUT_DIR"
+        fi
+        
+        if [ $? -eq 0 ]; then
+            echo "Processing completed successfully"
+        else
+            echo "Processing failed, check logs for details"
+            return 1
+        fi
+    else
+        echo "ERROR: Processor not found at $PROG"
+        return 1
+    fi
+}
+
+# Show usage information
+usage() {
+    cat << EOF
+MACSet Service v1.4.0 - MAC Address Processor for OpenWrt
+
+Usage: $0 {start|stop|restart|reload|status|config|sources|outputs|process|usage}
+
+Commands:
+    start       Start the MACSet service
+    stop        Stop the MACSet service
+    restart     Restart the MACSet service
+    reload      Reload configuration without restarting
+    status      Show service status and information
+    config      Show current configuration
+    sources     List source files being monitored
+    outputs     List processed output files
+    process     Process all files once (without monitoring)
+    usage       Show this help message
+
+Configuration:
+    Edit $CONFIG_FILE to customize service behavior.
+    
+    For directory mode:
+    - Set OPERATION_MODE="directory"
+    - Configure SOURCE_DIR and OUTPUT_DIR
+    
+    For file pairs mode:
+    - Set OPERATION_MODE="pairs"
+    - Configure FILE_PAIRS with format: "src1|dest1,src2|dest2"
+
+Examples:
+    $0 start              # Start the service
+    $0 status             # Check service status
+    $0 sources            # List source files
+    $0 process            # Process all files once
+    $0 config             # View configuration
+
+EOF
+}
+
+# Main command dispatcher
+case "$1" in
+    start)
+        start_service
+        ;;
+    stop)
+        stop_service
+        ;;
+    restart)
+        restart
+        ;;
+    reload)
+        reload_service
+        ;;
+    status)
+        status
+        ;;
+    config)
+        config
+        ;;
+    sources)
+        list_sources
+        ;;
+    outputs)
+        list_outputs
+        ;;
+    process)
+        process_all
+        ;;
+    usage|help)
+        usage
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|reload|status|config|sources|outputs|process|usage}"
+        exit 1
+        ;;
+esac
+
+exit $? 

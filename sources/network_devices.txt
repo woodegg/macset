@@ -1,0 +1,13 @@
+# Network Devices - Primary Network
+# Add MAC addresses for devices on the main network
+# This file contains devices that should have full network access
+00:11:22:33:44:55    # iPhone 12 Pro
+aa:bb:cc:dd:ee:ff    # Samsung Galaxy S21
+12:34:56:78:9a:bc    # Dell Laptop
+fe:dc:ba:98:76:54    # MacBook Pro
+ab:cd:ef:12:34:56    # Windows Desktop
+de:ad:be:ef:ca:fe    # iPad Pro
+1a:2b:3c:4d:5e:6f    # Android Tablet
+ff:ee:dd:cc:bb:aa    # Gaming Console
+11:22:33:44:55:66    # Smart TV
+99:88:77:66:55:44    # Network Printer 

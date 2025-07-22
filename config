@@ -1,0 +1,107 @@
+# MACSet Configuration File
+# 
+# This file contains configuration options for the MACSet processor service.
+# Edit these values to customize the behavior of the service.
+#
+# Author: Jun Zhang
+# Version: 1.4.0
+# License: MIT
+# Date: 2025-07-22
+
+# Source directory path
+# This directory contains files with MAC addresses and comments to be processed
+# The service will monitor all files matching the FILE_PATTERN in this directory
+SOURCE_DIR="/etc/macset/sources"
+
+# Output directory path
+# This is where the processed MAC addresses (without comments) will be saved
+# Each source file will generate a corresponding output file with "_clean.txt" suffix
+OUTPUT_DIR="/etc/macset/outputs"
+
+# File pattern to monitor
+# Pattern for files to process (e.g., "*.txt", "*.mac", "mac_*")
+# Supports standard shell glob patterns
+FILE_PATTERN="*.txt"
+
+# Individual file pairs configuration
+# Use this to specify individual source and destination files in different locations
+# Format: "source1|destination1,source2|destination2"
+# Example: "/etc/network.txt|/var/output.txt,/etc/guest.txt|/tmp/guest_clean.txt"
+# Leave empty to use directory-based monitoring
+FILE_PAIRS=""
+
+# Log file path
+# Service logs will be written to this file
+LOG_FILE="/var/log/macset/macset.log"
+
+# Monitor interval (seconds)
+# How often the service checks for file changes
+# Minimum value: 1 second
+# Recommended: 5-30 seconds for most use cases
+MONITOR_INTERVAL=5
+
+# Enable debug logging
+# Set to 1 to enable detailed debug logging, 0 to disable
+# Debug logs provide detailed information about processing steps
+DEBUG=0
+
+# MAC address format validation
+# Set to 1 to enable strict MAC address format validation, 0 to disable
+# When enabled, only properly formatted MAC addresses (xx:xx:xx:xx:xx:xx or xx-xx-xx-xx-xx-xx) are accepted
+VALIDATE_MAC_FORMAT=1
+
+# Auto-create source directory
+# Set to 1 to automatically create the source directory if it doesn't exist, 0 to disable
+# When enabled, the source directory will be created with sample files
+AUTO_CREATE_SOURCE=1
+
+# Backup processed files
+# Set to 1 to create backup copies of processed files, 0 to disable
+# When enabled, a backup will be created before overwriting the output file
+BACKUP_OUTPUT=0
+
+# Maximum file size (bytes)
+# Maximum size of source file to process (0 = no limit)
+# This prevents processing extremely large files that might cause issues
+MAX_FILE_SIZE=1048576
+
+# Process on startup
+# Set to 1 to process all files immediately when service starts, 0 to disable
+# When disabled, the service will only process files when changes are detected
+PROCESS_ON_STARTUP=1
+
+# Recursive directory scanning
+# Set to 1 to scan subdirectories recursively, 0 to only scan the main source directory
+# When enabled, the service will process files in subdirectories as well
+RECURSIVE_SCAN=0
+
+# File change detection method
+# Options: "mtime" (modification time) or "hash" (file content hash)
+# "mtime" is faster but may miss some changes, "hash" is more reliable but slower
+CHANGE_DETECTION="mtime"
+
+# Maximum number of files to monitor
+# Limit the number of files that can be monitored simultaneously (0 = no limit)
+# This prevents excessive resource usage with large numbers of files
+MAX_FILES=100
+
+# Output file naming convention
+# Options: "suffix" (add _clean.txt) or "prefix" (add clean_)
+# Determines how output files are named relative to source files
+OUTPUT_NAMING="suffix"
+
+# Operation mode
+# Options: "directory" (monitor directories) or "pairs" (monitor individual file pairs)
+# When set to "pairs", the service will use FILE_PAIRS configuration
+# When set to "directory", the service will use SOURCE_DIR and OUTPUT_DIR
+OPERATION_MODE="directory"
+
+# File pairs separator
+# Character used to separate multiple file pairs in FILE_PAIRS configuration
+# Default is comma (,)
+FILE_PAIRS_SEPARATOR=","
+
+# Source-destination separator
+# Character used to separate source and destination files in each pair
+# Default is pipe (|)
+SRC_DEST_SEPARATOR="|" 

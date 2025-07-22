@@ -1,0 +1,11 @@
+# Guest Devices - Guest Network
+# Add MAC addresses for guest devices
+# This file contains devices that should have limited network access
+a1:b2:c3:d4:e5:f6    # Guest Phone 1
+f1:e2:d3:c4:b5:a6    # Guest Laptop 1
+7a:8b:9c:d:e:f0      # Guest Tablet 1
+b1:c2:d3:e4:f5:a6    # Guest Phone 2
+e1:f2:a3:b4:c5:d6    # Guest Laptop 2
+8b:9c:d:e:f0:1a      # Guest Tablet 2
+c1:d2:e3:f4:a5:b6    # Guest Phone 3
+d1:e2:f3:a4:b5:c6    # Guest Laptop 3 

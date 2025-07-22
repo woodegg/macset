@@ -1,0 +1,40 @@
+# MACSet Sample Source File
+# 
+# This file contains MAC addresses and comments for processing.
+# Lines starting with # are comments and will be ignored.
+# MAC addresses can be in format: xx:xx:xx:xx:xx:xx or xx-xx-xx-xx-xx-xx
+# Inline comments (after #) are also supported and will be removed.
+#
+# Author: Jun Zhang
+# Version: 1.4.0
+# Date: 2025-07-22
+
+# Allowed devices for network access
+00:11:22:33:44:55    # iPhone 12 Pro
+aa:bb:cc:dd:ee:ff    # Samsung Galaxy S21
+12:34:56:78:9a:bc    # Dell Laptop
+
+# Guest devices
+fe:dc:ba:98:76:54    # Guest Phone 1
+ab:cd:ef:12:34:56    # Guest Laptop
+
+# IoT devices
+de:ad:be:ef:ca:fe    # Smart TV
+1a:2b:3c:4d:5e:6f    # Security Camera
+7a:8b:9c:d:e:f0      # Smart Speaker
+
+# Office devices
+ff:ee:dd:cc:bb:aa    # Printer HP LaserJet
+11:22:33:44:55:66    # Network Switch
+99:88:77:66:55:44    # Router Backup
+
+# Invalid MAC addresses (these will be ignored)
+invalid:mac:address  # This will be skipped
+12:34:56:78:9a       # Incomplete MAC
+gg:hh:ii:jj:kk:ll    # Invalid characters
+
+# Empty lines and comments are also ignored
+
+# More valid MAC addresses
+a1:b2:c3:d4:e5:f6    # Device X
+f1:e2:d3:c4:b5:a6    # Device Y 
