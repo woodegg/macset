@@ -248,7 +248,8 @@ monitor_files() {
         find "$source_dir" -maxdepth 1 -name "$pattern" -type f 2>/dev/null | while read -r source_file; do
             local current_modified=$(get_file_mtime "$source_file")
             local file_key=$(echo "$source_file" | sed 's/[^a-zA-Z0-9]/_/g')
-            local last_modified=$(grep "^$file_key:" "$last_modified_file" 2>/dev/null | cut -d: -f2 || echo "0")
+            local last_modified=$(grep "^$file_key:" "$last_modified_file" 2>/dev/null | cut -d: -f2- | head -1)
+            last_modified="${last_modified:-0}"
             
             # If file has been modified, process it
             if [ "$current_modified" -gt "$last_modified" ]; then
@@ -307,7 +308,8 @@ monitor_file_pairs() {
             if [ -n "$source_file" ] && [ -n "$output_file" ]; then
                 local current_modified=$(get_file_mtime "$source_file")
                 local file_key=$(echo "$source_file" | sed 's/[^a-zA-Z0-9]/_/g')
-                local last_modified=$(grep "^$file_key:" "$last_modified_file" 2>/dev/null | cut -d: -f2 || echo "0")
+                local last_modified=$(grep "^$file_key:" "$last_modified_file" 2>/dev/null | cut -d: -f2- | head -1)
+                last_modified="${last_modified:-0}"
                 
                 # If file has been modified, process it
                 if [ "$current_modified" -gt "$last_modified" ]; then
