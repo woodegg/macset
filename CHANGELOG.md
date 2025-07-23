@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Individual file pairs support**: Specify source and destination files in different locations
+- **Three-column file pairs format**: Support for optional command execution after file processing
 - **Operation modes**: Support for both directory-based and file pairs monitoring
 - **Enhanced flexibility**: Process files from any location on the filesystem
 - **File pairs configuration**: New FILE_PAIRS setting for individual file specifications
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Separator configuration**: Customizable separators for file pairs parsing
 - **Enhanced service management**: Better support for file pairs in init.d script
 - **Improved documentation**: Comprehensive examples for file pairs usage
+- **Command execution**: Execute custom commands after successful file processing
 
 ### Changed
 - **Configuration structure**: Added new options for file pairs mode

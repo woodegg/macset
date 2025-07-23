@@ -283,12 +283,15 @@ FILE_PATTERN="*.txt *.mac"
 
 ### Individual File Pairs
 
-Use file pairs for maximum flexibility:
+Use file pairs for maximum flexibility. The format supports three columns:
+- **Column 1**: Source file path
+- **Column 2**: Destination file path  
+- **Column 3**: Command to execute after processing (optional)
 
 ```bash
 # Configuration example
 OPERATION_MODE="pairs"
-FILE_PAIRS="/etc/network.txt|/var/output.txt,/etc/guest.txt|/tmp/guest_clean.txt,/home/user/devices.txt|/var/lib/macset/processed.txt"
+FILE_PAIRS="/etc/network.txt|/var/output.txt|/etc/init.d/firewall restart,/etc/guest.txt|/tmp/guest_clean.txt,/home/user/devices.txt|/var/lib/macset/processed.txt|systemctl reload dnsmasq"
 ```
 
 ### Multiple Service Instances
@@ -302,8 +305,8 @@ cp /etc/macset/config /etc/macset/config.iot
 
 # Edit configs to use different file pairs
 # Then run separate instances
-macset-processor -m -F "/etc/guest.txt|/tmp/guest_clean.txt" &
-macset-processor -m -F "/etc/iot.txt|/tmp/iot_clean.txt" &
+macset-processor -m -F "/etc/guest.txt|/tmp/guest_clean.txt|/etc/init.d/network restart" &
+macset-processor -m -F "/etc/iot.txt|/tmp/iot_clean.txt|systemctl reload dnsmasq" &
 ```
 
 ### Integration with Network Services

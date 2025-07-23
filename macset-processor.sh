@@ -7,7 +7,7 @@
 # only valid MAC addresses. Supports multiple files, directories, and individual file pairs.
 #
 # Author: Jun Zhang
-# Version: 1.4.0
+# Version: 1.4.1
 # License: MIT
 # Date: 2025-07-22
 #
@@ -21,7 +21,7 @@ DEFAULT_DEBUG=0
 DEFAULT_FILE_PATTERN="*.txt"
 
 # Load configuration if available
-CONFIG_FILE="/etc/macset/config"
+CONFIG_FILE="${CONFIG_FILE:-/etc/macset/config}"
 if [ -f "$CONFIG_FILE" ]; then
     . "$CONFIG_FILE"
 fi
@@ -35,7 +35,7 @@ DEBUG="${DEBUG:-$DEFAULT_DEBUG}"
 FILE_PATTERN="${FILE_PATTERN:-$DEFAULT_FILE_PATTERN}"
 
 # PID file for service management
-PID_FILE="/var/run/macset.pid"
+PID_FILE="${PID_FILE:-/var/run/macset.pid}"
 
 # Colors for output (if supported)
 RED='\033[0;31m'
@@ -212,10 +212,21 @@ process_file_pairs() {
     log_message "INFO" "Processing individual file pairs"
     
     # Process each file pair
-    echo "$file_pairs" | tr ',' '\n' | while IFS='|' read -r source_file output_file; do
+    echo "$file_pairs" | tr ',' '\n' | while IFS='|' read -r source_file output_file command; do
         if [ -n "$source_file" ] && [ -n "$output_file" ]; then
             log_message "INFO" "Processing file pair: $source_file -> $output_file"
             process_mac_addresses "$source_file" "$output_file"
+            
+            # Execute command if provided
+            if [ -n "$command" ]; then
+                log_message "INFO" "Executing command: $command"
+                if eval "$command"; then
+                    log_message "INFO" "Command executed successfully: $command"
+                else
+                    log_message "ERROR" "Command failed: $command"
+                fi
+            fi
+            
             total_processed=$((total_processed + 1))
         fi
     done
@@ -304,7 +315,7 @@ monitor_file_pairs() {
         local files_changed=0
         
         # Check each file pair
-        echo "$file_pairs" | tr ',' '\n' | while IFS='|' read -r source_file output_file; do
+        echo "$file_pairs" | tr ',' '\n' | while IFS='|' read -r source_file output_file command; do
             if [ -n "$source_file" ] && [ -n "$output_file" ]; then
                 local current_modified=$(get_file_mtime "$source_file")
                 local file_key=$(echo "$source_file" | sed 's/[^a-zA-Z0-9]/_/g')
@@ -315,6 +326,16 @@ monitor_file_pairs() {
                 if [ "$current_modified" -gt "$last_modified" ]; then
                     log_message "INFO" "File change detected: $source_file"
                     process_mac_addresses "$source_file" "$output_file"
+                    
+                    # Execute command if provided
+                    if [ -n "$command" ]; then
+                        log_message "INFO" "Executing command: $command"
+                        if eval "$command"; then
+                            log_message "INFO" "Command executed successfully: $command"
+                        else
+                            log_message "ERROR" "Command failed: $command"
+                        fi
+                    fi
                     
                     # Update modification time
                     sed -i "/^$file_key:/d" "$last_modified_file" 2>/dev/null
@@ -340,7 +361,7 @@ cleanup() {
 # Show usage information
 show_usage() {
     cat << EOF
-MACSet Processor v1.4.0 - MAC Address Set Processor for OpenWrt
+MACSet Processor v1.4.1 - MAC Address Set Processor for OpenWrt
 
 Usage: $0 [OPTIONS] [SOURCE_DIR] [OUTPUT_DIR]
    or: $0 [OPTIONS] -F FILE_PAIRS
@@ -354,7 +375,7 @@ Options:
     -i, --interval SEC  Set monitor interval in seconds (default: $DEFAULT_MONITOR_INTERVAL)
     -f, --pattern PAT   Set file pattern to monitor (default: $DEFAULT_FILE_PATTERN)
     -s, --single FILE   Process a single file (legacy mode)
-    -F, --file-pairs    Specify individual file pairs (format: "src1|dest1,src2|dest2")
+    -F, --file-pairs    Specify individual file pairs (format: "src1|dest1|cmd1,src2|dest2|cmd2")
 
 Arguments:
     SOURCE_DIR          Directory containing source files with MAC addresses
@@ -362,14 +383,15 @@ Arguments:
 
 File Pairs Format:
     Use -F option to specify individual source and destination files:
-    -F "file1.txt|/path/to/output1.txt,file2.txt|/path/to/output2.txt"
+    -F "file1.txt|/path/to/output1.txt|command1,file2.txt|/path/to/output2.txt"
+    The third column (command) is optional and will be executed after file processing
 
 Examples:
     $0                                    # Run with default configuration
     $0 -p /path/to/sources /path/to/outputs  # Process all files once
     $0 -m -i 10 -f "*.mac" sources outputs  # Monitor with 10-second interval
     $0 -s input.txt output.txt             # Legacy single file mode
-    $0 -F "/etc/network.txt|/var/output.txt,/etc/guest.txt|/tmp/guest_clean.txt"
+    $0 -F "/etc/network.txt|/var/output.txt|/etc/init.d/firewall restart,/etc/guest.txt|/tmp/guest_clean.txt"
 
 Configuration:
     Edit /etc/macset/config to customize default settings.
@@ -380,7 +402,7 @@ EOF
 # Show version information
 show_version() {
     cat << EOF
-MACSet Processor v1.4.0
+MACSet Processor v1.4.1
 MAC Address Set Processor for OpenWrt
 
 Copyright (c) 2024 MACSet Project Team

@@ -25,8 +25,9 @@ FILE_PATTERN="*.txt"
 
 # Individual file pairs configuration
 # Use this to specify individual source and destination files in different locations
-# Format: "source1|destination1,source2|destination2"
-# Example: "/etc/network.txt|/var/output.txt,/etc/guest.txt|/tmp/guest_clean.txt"
+# Format: "source1|destination1|command1,source2|destination2|command2"
+# Example: "/etc/network.txt|/var/output.txt|/etc/init.d/firewall restart,/etc/guest.txt|/tmp/guest_clean.txt"
+# The third column (command) is optional and will be executed after the file is processed
 # Leave empty to use directory-based monitoring
 FILE_PAIRS=""
 
